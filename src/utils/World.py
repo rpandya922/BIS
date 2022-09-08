@@ -185,8 +185,10 @@ class World(DirectObject):
         self.light.lookAt(0, 0, 0)
 
         self.light.node().setCameraMask(BitMask32.bit(0))
-        self.human.goal_model.hide(BitMask32.bit(0))
-        self.robot.goal_model.hide(BitMask32.bit(0))
+        if self.human.goal_model is not None:
+            self.human.goal_model.hide(BitMask32.bit(0))
+        if self.robot.goal_model is not None:
+            self.robot.goal_model.hide(BitMask32.bit(0))
         
         self.light.node().getLens().setNearFar(1, 100)
         render.setLight(self.light)
