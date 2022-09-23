@@ -4,6 +4,7 @@ from .Ball3D import Ball3D
 from .SharedGoalsBall import SharedGoalsBall
 from .Unicycle import Unicycle
 from .SCARA import SCARA
+from .SharedGoalsSCARA import SharedGoalsSCARA
 from .RobotArm import RobotArm
 from .HumanBall2D import HumanBall2D
 from .HumanBall3D import HumanBall3D

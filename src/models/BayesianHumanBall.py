@@ -1,13 +1,16 @@
+from models.SharedGoalsBall import SharedGoalsBall
+from models.SharedGoalsSCARA import SharedGoalsSCARA
 from .HumanBall2D import HumanBall2D
 import numpy as np
 from scipy.special import softmax
 
 class BayesEstimator():
-    def __init__(self, thetas, dynamics, prior=None, beta=0.7):
+    def __init__(self, thetas, dynamics, prior=None, beta=0.7, partner=SharedGoalsBall):
 
         self.thetas = thetas
         self.dynamics = dynamics
         self.beta = beta
+        self.partner = partner
 
         n_theta = thetas.shape[1]
         if prior is None:
@@ -28,11 +31,17 @@ class BayesEstimator():
         return self.actions[a_idx], a_idx
 
     def update_belief(self, state, action):
+
+        # check if partner is scara 
+        if isinstance(self.partner, SharedGoalsSCARA):
+            # we need to calculate the end effector position
+            state = self.partner.get_ee_state(state)
+
         # project chosen action to discrete set
         _, a_idx = self.project_action(action)
 
         # consider the next state if each potential action was chosen
-        next_states = np.array([self.dynamics.step(state, a[:,None]) for a in self.actions]) # dynamics.step expects column vectors
+        next_states = np.array([self.dynamics(state, a[:,None]) for a in self.actions]) # dynamics.step expects column vectors
         rs = np.array([-np.linalg.norm(state - s) for s in next_states])[:,None]
 
         # assume optimal trajectory is defined by straight line towards goal, so reward is negative distance from goal
@@ -54,7 +63,6 @@ class BayesEstimator():
     def copy(self):
         return BayesEstimator(self.thetas.copy(), self.dynamics, self.belief.copy(), self.beta)
 
-# TODO: make this inherit from HumanBall2D
 class BayesianHumanBall(HumanBall2D):
 
     """
@@ -69,17 +77,38 @@ class BayesianHumanBall(HumanBall2D):
         self.goal_idx = np.argmin(np.linalg.norm(self.possible_goals[[0,1,2]] - self.get_P(), axis=0))
         self.goal = self.possible_goals[:,[self.goal_idx]]
 
-        self.belief = BayesEstimator(self.possible_goals, None)
-
+    # TODO: this may not be necessary since partner agent gets passed in to update() function
     def set_partner_agent(self, agent):
         self.partner = agent
+        # TODO: the dynamics function should use the human's current estimate of the robot's dynamics
+        self.belief = BayesEstimator(self.possible_goals[0:4,:], self.partner.dynamics, partner=self.partner)
 
     def set_goals_from_partner(self, goals):
         self.possible_goals = goals
         # compute closest goal
         self.goal_idx = np.argmin(np.linalg.norm(self.possible_goals[[0,1,2]] - self.get_P(), axis=0))
         self.goal = self.possible_goals[:,[self.goal_idx]]
-        # TODO: reset belief here
+        # reset belief 
+        self.belief = BayesEstimator(self.possible_goals[0:4,:], self.partner.dynamics, partner=self.partner)
+
+    def update(self, obstacle):
+        self.update_goal()
+        self.m[[0,1,3,4]] = self.x
+        if self.auto:
+            self.kalman_estimate_state()
+        # observe the robot
+        x_robot_est = self.rls_estimate_state(obstacle)
+        u_robot = obstacle.u
+        # update belief
+        self.belief.update_belief(x_robot_est, u_robot)
+        # update goal
+        robot_goal_idx = np.argmax(self.belief.belief)
+        if robot_goal_idx == self.goal_idx:
+            # pick the closest goal that's not the current goal
+            dists = np.linalg.norm(self.possible_goals[[0,1,2]] - self.get_P(), axis=0)
+            dists[self.goal_idx] = np.inf
+            self.goal_idx = np.argmin(dists)
+            self.goal = self.possible_goals[:,[self.goal_idx]]
 
     def update_goal(self):
         dx = self.get_P() - self.goal[[0,1,2]]

@@ -2,14 +2,14 @@ from agents import *
 from models import *
 from utils.World import *
 
-# end class world
-
 # instantiate the class
 dT = 0.05
+# robot = SCARA(SublevelSafeSet(), dT)
+robot = SharedGoalsSCARA(SublevelSafeSet(), dT)
 # robot = RobotArm(SublevelSafeSet(), dT);
 # robot = Unicycle(SafeSet(), dT);
 # robot = Ball(SafeSet(), dT);
-robot = SharedGoalsBall(SafeSet(d_min=0.5), dT)
+# robot = SharedGoalsBall(SafeSet(d_min=3), dT)
 # human = InteractiveHumanBall2D(SafeSet(d_min=1, k_v=2), dT);
 # human = HumanBall2D(MobileAgent, dT)
 human = BayesianHumanBall(MobileAgent, dT)

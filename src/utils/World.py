@@ -137,7 +137,6 @@ class World(DirectObject):
             # camera.setHpr(self.camera_h, self.camera_p, 0)  # Set the camera orientation
             #(heading, pitch, roll) in degrees
 
-
             if self.record is None:
                 self.human.update(self.robot)
                 self.human.move()
