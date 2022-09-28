@@ -110,11 +110,19 @@ class BayesianHumanBall(HumanBall2D):
             self.goal_idx = np.argmin(dists)
             self.goal = self.possible_goals[:,[self.goal_idx]]
 
-    def update_goal(self):
+    def is_goal_reached(self):
         dx = self.get_P() - self.goal[[0,1,2]]
         dv = self.get_V() - self.goal[[3,4,5]]
 
-        if np.linalg.norm(dx) < 0.3 and np.linalg.norm(dv) < 0.5:
+        return (np.linalg.norm(dx) < 0.5) and (np.linalg.norm(dv) < 0.5)
+
+    def update_goal(self):
+        # dx = self.get_P() - self.goal[[0,1,2]]
+        # dv = self.get_V() - self.goal[[3,4,5]]
+
+        # # TODO: make separate function for checking if goal is reached
+        # if np.linalg.norm(dx) < 0.3 and np.linalg.norm(dv) < 0.5:
+        if self.is_goal_reached():
             self.goal_achieved = self.goal_achieved + 1
             # self.goal = np.vstack(self.goals[:,self.goal_achieved])
             self.possible_goals[:,self.goal_idx] = self.goals[:,self.goal_achieved+3]

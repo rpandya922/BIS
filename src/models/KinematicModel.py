@@ -40,7 +40,8 @@ class KinematicModel:
             is_2D (bool): whether this model is a 2D model, which means it can only move on the groud plane.
 
         """
-        self.control_noise = 0.02 # noise scale
+        # self.control_noise = 0.02 # noise scale
+        self.control_noise = 0.0 
         self.safe_dis = 1
         self.map_size = 10 # map boundary size
         self.fraction = 0.2 # velocity decrease rate per dT
