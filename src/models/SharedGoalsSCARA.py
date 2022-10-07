@@ -1,16 +1,36 @@
 import numpy as np
+import torch
+softmax = torch.nn.Softmax(dim=1)
+from collections import deque
 
 from .SCARA import SCARA
 from .KinematicModel import KinematicModel
+from predictor.intention_predictor import create_model
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class SharedGoalsSCARA(SCARA):
-    def __init__(self, agent, dT, auto = True, init_state = [-4,-4, 0, 0, 4.5, 4.5]):
+    def __init__(self, agent, dT, auto = True, init_state = [-4,-4, 0, 0, 4.5, 4.5], use_intent_pred = False):
         SCARA.__init__(self, agent, dT, auto, init_state)
+
+        self.use_intent_pred = use_intent_pred
+        if self.use_intent_pred:
+            horizon_len = 20
+            hist_len = 5
+            goal_mode = "dynamic"
+            self.intent_predictor = create_model(horizon_len=horizon_len, goal_mode=goal_mode)
+            self.intent_predictor.load_state_dict(torch.load("../data/models/bis_intention_predictor.pt", map_location=device))
+            self.horizon_len = horizon_len
+            self.hist_len = hist_len
+            self.goal_mode = goal_mode
+            self.intention_data = {"xh_hist": deque(), "xr_hist": deque(), "goals_hist": deque()}
         
     def set_partner_agent(self, agent):
         self.partner = agent
         # set the possible goals to be the same as partner's set of goals
         self.possible_goals = self.partner.possible_goals
+        n_goals = self.possible_goals.shape[1]
+        self.goal_probs = np.ones((n_goals,)) / n_goals
         # set the goal to be the closest goal to self
         self.goal_idx = np.argmin(np.linalg.norm(self.possible_goals[[0,1,2]] - self.get_P(), axis=0))
         self.goal = self.possible_goals[:,[self.goal_idx]]
@@ -20,6 +40,95 @@ class SharedGoalsSCARA(SCARA):
         # compute closest goal
         self.goal_idx = np.argmin(np.linalg.norm(self.possible_goals[[0,1,2]] - self.get_P(), axis=0))
         self.goal = self.possible_goals[:,[self.goal_idx]]
+
+    def u_ref(self, x=None):
+        if x is None:
+            x = self.get_PV()
+        inv_J = self.inv_J()
+        dp = self.observe((self.goal - x)[[0,1]]);
+        dis = np.linalg.norm(dp);
+        v = self.observe(self.get_V())[[0,1]];
+
+        if dis > 2:
+            u0 = 0.2 * inv_J * dp - self.k_v * self.observe(self.x[[2,3],0]);
+        else:
+            u0 = 0.1 * inv_J * dp - self.k_v * self.observe(self.x[[2,3],0]);
+
+        return u0
+
+    def get_nominal_plan(self, horizon=5, return_controls=False, xr0=None, goal=None):
+        # ignore safe control for plan
+        if xr0 is None:
+            robot_x = self.x
+        else:
+            robot_x = xr0
+        
+        if goal is None:
+            goal = self.goal
+        
+        robot_states = np.zeros((4, horizon))
+        robot_controls = np.zeros((2, horizon))
+        for i in range(horizon):
+            xx = np.vstack((robot_x, np.zeros((2,1))))
+            goal_u = self.u_ref(xx)
+            robot_x = self.dynamics(robot_x, goal_u)
+            robot_states[:,[i]] = robot_x
+            robot_controls[:,[i]] = goal_u
+        if return_controls:
+            return robot_states, robot_controls
+        return robot_states
+
+    def get_intent_pred(self, obstacle):
+        if not self.use_intent_pred:
+            return
+
+        # update the intention data
+        self.intention_data["xh_hist"].append(obstacle.x_est)
+        if len(self.intention_data["xh_hist"]) > self.hist_len:
+            self.intention_data["xh_hist"].popleft()
+        self.intention_data["xr_hist"].append(self.x)
+        if len(self.intention_data["xr_hist"]) > self.hist_len:
+            self.intention_data["xr_hist"].popleft()
+        self.intention_data["goals_hist"].append(self.possible_goals[0:4,:])
+        if len(self.intention_data["goals_hist"]) > self.hist_len:
+            self.intention_data["goals_hist"].popleft()
+        
+        # if the intention data is not long enough, return
+        if len(self.intention_data["xh_hist"]) < self.hist_len:
+            return
+        
+        # get the intention prediction
+        xh_hist = np.hstack(self.intention_data["xh_hist"])
+        xr_hist = np.hstack(self.intention_data["xr_hist"])
+        goals_hist = np.dstack(self.intention_data["goals_hist"])
+        goals_hist = goals_hist.reshape((goals_hist.shape[0]*goals_hist.shape[1], goals_hist.shape[2]))
+
+        # compute the robot's nominal plan towards its current goal
+        xr_future = self.get_nominal_plan(horizon=self.horizon_len, return_controls=False, xr0=self.x, goal=self.goal)
+        
+        # convert to torch tensors to input to NN model
+        traj_hist = torch.tensor(np.vstack((xh_hist, xr_hist)).T).float().to(device).unsqueeze(0)
+        goals_hist = torch.tensor(goals_hist.T).float().to(device).unsqueeze(0)
+        xr_future = torch.tensor(xr_future.T).float().to(device).unsqueeze(0)
+        
+        # query intention prediction model
+        goal_probs = softmax(self.intent_predictor(traj_hist, xr_future, goals_hist)).detach().numpy()[0]
+        self.goal_probs = goal_probs
+
+    def update(self, obstacle):
+        """Update phase. 1. update score, 2. predict intention of human 3. update goal, 4. update self state estimation, 5. update the nearest point on self to obstacle, 6. calculate control input, 7. update historical trajectory.
+
+        Args:
+            obstacle (KinematicModel()): the obstacle
+        """
+        self.time = self.time + 1
+        self.update_score(obstacle)
+        self.get_intent_pred(obstacle)
+        self.update_goal()
+        self.kalman_estimate_state()
+        self.update_m(obstacle.m)
+        self.calc_control(obstacle)
+        self.update_trace()
 
     def update_goal(self):
         dx = self.get_P() - self.goal[[0,1,2]]

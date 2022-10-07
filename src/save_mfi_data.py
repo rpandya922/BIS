@@ -1,4 +1,5 @@
 import numpy as np
+from tqdm import tqdm
 
 from agents import SublevelSafeSet, MobileAgent
 from models import SharedGoalsSCARA, BayesianHumanBall
@@ -50,10 +51,10 @@ def propogate_goal_reached(h_goal_reached, h_goal_idx):
         # cheat a bit and use the actual human goal for any remaining time steps
         goal_idxs[goals_reached[-1]:] = h_goal_idx[goals_reached[-1]:]
 
-    for i in range(goals_reached[-1], -1, -1):
-        if h_goal_reached[i] == 1:
-            curr_goal = h_goal_idx[i]
-        goal_idxs[i] = curr_goal
+        for i in range(goals_reached[-1], -1, -1):
+            if h_goal_reached[i] == 1:
+                curr_goal = h_goal_idx[i]
+            goal_idxs[i] = curr_goal
     return goal_idxs
 
 def create_dataset(n_trajectories=1):
@@ -68,7 +69,7 @@ def create_dataset(n_trajectories=1):
     goal_reached = []
     goal_idx = []
 
-    for i in range(n_trajectories):
+    for i in tqdm(range(n_trajectories)):
         xh_traj, xr_traj, goals, h_goal_reached, h_goal_idx = simulate_interaction(horizon=horizon)
         h_goal_idx = propogate_goal_reached(h_goal_reached, h_goal_idx)
 
@@ -94,7 +95,8 @@ def save_data(path="../data/simulated_interactions.npz", n_trajectories=10):
 
     all_xh_traj, all_xr_traj, all_goals, all_h_goal_reached, goal_reached, goal_idx = create_dataset(n_trajectories=n_trajectories)
 
-    np.savez(path, all_xh_traj=all_xh_traj, all_xr_traj=all_xr_traj, all_goals=all_goals, all_h_goal_reached=all_h_goal_reached, goal_reached=goal_reached, goal_idx=goal_idx)
+    np.savez(path, xh_traj=all_xh_traj, xr_traj=all_xr_traj, goals=all_goals, h_goal_reached=all_h_goal_reached, goal_reached=goal_reached, goal_idx=goal_idx)
 
 if __name__ == "__main__":
-    save_data()
+    save_data("../data/simulated_interactions_train.npz", n_trajectories=200)
+    # save_data("../data/simulated_interactions_test.npz", n_trajectories=200)
