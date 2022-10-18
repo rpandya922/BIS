@@ -98,5 +98,5 @@ def save_data(path="../data/simulated_interactions.npz", n_trajectories=10):
     np.savez(path, xh_traj=all_xh_traj, xr_traj=all_xr_traj, goals=all_goals, h_goal_reached=all_h_goal_reached, goal_reached=goal_reached, goal_idx=goal_idx)
 
 if __name__ == "__main__":
-    save_data("../data/simulated_interactions_train.npz", n_trajectories=200)
+    save_data("../data/simulated_interactions_train.npz", n_trajectories=1000)
     # save_data("../data/simulated_interactions_test.npz", n_trajectories=200)
