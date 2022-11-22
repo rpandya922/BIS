@@ -120,8 +120,6 @@ class BayesianHumanBall(HumanBall2D):
         # dx = self.get_P() - self.goal[[0,1,2]]
         # dv = self.get_V() - self.goal[[3,4,5]]
 
-        # # TODO: make separate function for checking if goal is reached
-        # if np.linalg.norm(dx) < 0.3 and np.linalg.norm(dv) < 0.5:
         if self.is_goal_reached():
             self.goal_achieved = self.goal_achieved + 1
             # self.goal = np.vstack(self.goals[:,self.goal_achieved])
@@ -145,8 +143,20 @@ class BayesianHumanBall(HumanBall2D):
         # self.goal_model = goal_models[self.goal_idx]
 
     def redraw_model(self):
+        nominal_goal_color = [0.6, 0.6, 0.6, 0.5]
+        self_goal_color = [0.8, 0.3, 0.2, 0.5]
+        partner_goal_color = [0.1, 0.5, 0.8, 0.5]
+        shared_goal_color = [0.4, 0.2, 0.5, 0.5]
+
         self.agent_model.setPos(self.get_P()[0], self.get_P()[1], 0)
-        # self.goal_model.setPos(self.goal[0], self.goal[1], 0)
         for i, goal_model in enumerate(self.goal_models):
+            if i == self.goal_idx and i == self.partner.goal_idx:
+                goal_model.set_color(*shared_goal_color)
+            elif i == self.goal_idx:
+                goal_model.set_color(*self_goal_color)
+            elif i == self.partner.goal_idx:
+                goal_model.set_color(*partner_goal_color)
+            else:
+                goal_model.set_color(*nominal_goal_color)
             goal_model.setPos(self.possible_goals[:,i][0], self.possible_goals[:,i][1], 0)
         

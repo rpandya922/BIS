@@ -1,3 +1,4 @@
+import numpy as np
 from agents import *
 from models import *
 from utils.World import *
@@ -10,6 +11,7 @@ from utils.World import *
 # robot = SharedGoalsBall(SafeSet(d_min=3), dT)
 # human = InteractiveHumanBall2D(SafeSet(d_min=1, k_v=2), dT);
 # human = HumanBall2D(MobileAgent, dT)
+np.random.seed(0)
 dT = 0.05
 robot = SharedGoalsSCARA(SublevelSafeSet(), dT, use_intent_pred=True)
 human = BayesianHumanBall(MobileAgent, dT)
